@@ -1,0 +1,42 @@
+# Local configuration and secrets
+settings.json
+settings.local.json
+.env
+.env.*
+!.env.example
+
+# Python virtual environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime output
+logs/
+*.log
+*.stop
+*.pid
+
+# Windows/editor/IDE files
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Local test and coverage output
+.coverage
+coverage.xml
+htmlcov/
+.tox/

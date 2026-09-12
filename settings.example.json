@@ -1,0 +1,41 @@
+{
+  "plex_url": "http://127.0.0.1:32400",
+  "plex_token": "PUT_YOUR_PLEX_TOKEN_HERE",
+  "discord_token": "PUT_YOUR_DISCORD_BOT_TOKEN_HERE",
+  "discord_user_id": 123456789012345678,
+  "log_file": "logs/plex_playlist_watcher.log",
+  "log_max_bytes": 5242880,
+  "log_backup_count": 5,
+  "settle_seconds": 5,
+  "file_timeout": 3600,
+  "plex_timeout": 300,
+  "poll_interval": 3,
+  "batch_seconds": 8,
+  "folder_poll_seconds": 30,
+  "scan": true,
+  "jobs": [
+    {
+      "name": "Example Videos",
+      "watch_folder": "YOUR_LOCAL_VIDEO_FOLDER",
+      "library": "Example Videos",
+      "playlist": "Example Videos"
+    },
+    {
+      "name": "Tutorials",
+      "watch_folder": "YOUR_LOCAL_TUTORIAL_FOLDER",
+      "library": "Tutorials",
+      "playlist": "Tutorial Queue",
+      "extensions": [".mp4", ".mkv", ".webm"]
+    },
+    {
+      "name": "Remote Archive",
+      "watch_folder": "YOUR_LOCAL_ARCHIVE_FOLDER",
+      "plex_library_folder": "/plex/media/archive",
+      "plex_scan_path": "/plex/media/archive",
+      "library": "Archive",
+      "playlist": "Archive Queue",
+      "scan": true,
+      "folder_poll_seconds": 60
+    }
+  ]
+}

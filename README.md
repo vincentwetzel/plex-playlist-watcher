@@ -2,7 +2,7 @@
 
 Runs a local Discord bot that watches configured folders for completed video
 files, asks Plex to scan each folder, adds newly indexed videos to its paired
-regular Plex playlist, sorts each playlist from shortest to longest, and sends
+regular Plex playlist, sorts each playlist by its configured order, and sends
 a DM about each batch.
 
 ## Install
@@ -70,7 +70,9 @@ locally for debugging without entering the repository.
 
 Every job watches its configured folder, allows files to finish copying,
 scans them into its configured Plex library, adds them to its paired regular
-playlist, sorts shortest-first, and reports the additions in a Discord DM.
+playlist, sorts according to `sort_by`, and reports the additions in a Discord
+DM. The default is `duration`, which sorts shortest-first; use
+`"sort_by": "creation_date"` to sort oldest-first by Plex's Date Added value.
 Only files created or moved into a watched folder after the bot starts are
 processed. Files already present at startup are ignored.
 
@@ -102,7 +104,8 @@ apply to every job, while a job can override them when needed:
   "name": "YouTube",
   "watch_folder": "YOUR_LOCAL_YOUTUBE_FOLDER",
   "library": "YOUTUBE",
-  "playlist": "YOUTUBE"
+  "playlist": "YOUTUBE",
+  "sort_by": "creation_date"
 }
 ```
 
@@ -115,6 +118,11 @@ Only these three job fields are required:
 `plex_library_folder` and `plex_scan_path` are optional. If omitted, both
 default to `watch_folder`, which is the correct setup when Plex runs on the
 same Windows machine and sees the same path.
+
+`sort_by` is optional and defaults to `duration`, sorting shortest videos
+first. Set it to `creation_date` to sort oldest-first by Plex's Date Added
+(`addedAt`) value. If the configured playlist is deleted, the bot recreates a
+regular playlist automatically when the next video is indexed.
 
 Each job is independent: a new file in one folder is scanned only in that
 job's library, added only to that job's playlist, and reported with the job

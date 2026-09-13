@@ -12,6 +12,7 @@
   "poll_interval": 3,
   "batch_seconds": 8,
   "folder_poll_seconds": 30,
+  "sort_by": "duration",
   "scan": true,
   "jobs": [
     {
@@ -25,6 +26,7 @@
       "watch_folder": "YOUR_LOCAL_TUTORIAL_FOLDER",
       "library": "Tutorials",
       "playlist": "Tutorial Queue",
+      "sort_by": "creation_date",
       "extensions": [".mp4", ".mkv", ".webm"]
     },
     {

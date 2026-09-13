@@ -35,9 +35,12 @@ the job name to each DM.
    `plex_scan_path`.
 6. Plex is polled until each exact `plex_library_folder`-mapped file path is
    indexed and has a duration.
-7. Items not already present in the paired playlist are added by rating key.
+7. If the paired regular playlist was deleted, it is recreated with the
+   indexed batch. Otherwise, items not already present are added by rating key.
 8. The entire regular playlist is reordered using Plex's move operation,
-   shortest duration first. Missing durations sort last.
+   according to the job's `sort_by` setting. Duration sorts shortest first;
+   creation date sorts oldest Plex Date Added first. Missing sort values go
+   last.
 9. If at least one item was added, the Discord client sends a summary DM.
 
 Events that arrive while a batch is being processed remain queued for the

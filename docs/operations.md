@@ -81,6 +81,10 @@ Confirm that `playlist` names a regular playlist, not a smart playlist, and
 that the configured Plex token can edit it. The log should show `Added ...`
 and `Sorted playlist ...` after successful indexing.
 
+If the configured regular playlist was deleted, the bot recreates it from the
+first successfully indexed batch. Look for `Recreated missing regular playlist`
+in the log.
+
 ### Discord DMs are not arriving
 
 Verify `discord_token` and numeric `discord_user_id`. The bot does not need
@@ -93,6 +97,26 @@ for the Discord exception; a DM failure does not stop Plex watching.
 The periodic discovery fallback defaults to 30 seconds after wake. Look for a
 `Discovery found new file` entry. Lower `folder_poll_seconds` if quicker
 detection is needed, at the cost of more directory enumeration.
+
+### Watched folder was deleted and recreated
+
+If the bot remains running, periodic discovery detects the recreated folder
+within the configured `folder_poll_seconds` interval (30 seconds by default).
+Files found after the original startup baseline are processed. The Watchdog
+event subscription may not resume for the recreated directory, so this polling
+fallback is what guarantees recovery.
+
+If the bot starts while the folder is missing, startup fails until the folder
+exists. Files already present when the bot eventually starts are intentionally
+ignored as startup files.
+
+### Playlist was deleted
+
+If a configured playlist is missing, the bot waits until a video is indexed,
+then recreates it as a regular playlist using that batch. It subsequently
+sorts the playlist according to `sort_by`. A smart playlist with the configured
+name is still rejected because Plex does not support the required reorder
+operation.
 
 ### Discord stays offline after sleep
 

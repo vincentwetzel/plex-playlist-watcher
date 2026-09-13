@@ -1,5 +1,5 @@
 """Watch configured folders, add indexed videos to paired Plex playlists,
-and sort each playlist by duration.
+and sort each playlist by its configured order.
 
 The watcher deliberately waits for a file to stop changing before asking Plex
 to scan. Plex scans are asynchronous, so it then polls the library until the
@@ -25,7 +25,7 @@ from threading import Event, Thread
 from typing import Iterable
 
 import discord
-from plexapi.exceptions import PlexApiException
+from plexapi.exceptions import NotFound, PlexApiException
 from plexapi.server import PlexServer
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -90,6 +90,18 @@ def duration_sort_key(item):
     )
 
 
+def creation_date_sort_key(item):
+    """Sort by Plex's Date Added value, oldest videos first."""
+
+    creation_date = getattr(item, "addedAt", None)
+    return (
+        creation_date is None,
+        str(creation_date) if creation_date is not None else "",
+        (getattr(item, "title", "") or "").casefold(),
+        str(getattr(item, "ratingKey", "")),
+    )
+
+
 @dataclass(frozen=True)
 class WatchJob:
     name: str
@@ -106,6 +118,7 @@ class WatchJob:
     batch_seconds: float
     folder_poll_seconds: float
     scan: bool
+    sort_by: str
 
 
 class PlexPlaylistWatcher:
@@ -116,10 +129,11 @@ class PlexPlaylistWatcher:
         self.stop_event = Event()
         self.pending: queue.Queue[str] = queue.Queue()
         self.known_files: set[str] = set()
+        self.last_playlist_created = False
         self.section = self.plex.library.section(job.library)
-        self.playlist = self.plex.playlist(job.playlist)
+        self.playlist = self.find_or_defer_playlist()
 
-        if getattr(self.playlist, "smart", False):
+        if self.playlist is not None and getattr(self.playlist, "smart", False):
             raise ValueError(
                 f"Playlist {job.playlist!r} is a smart playlist. "
                 "Use a regular playlist because smart playlists cannot be reordered."
@@ -129,6 +143,42 @@ class PlexPlaylistWatcher:
             raise ValueError(f"Watched folder does not exist or is not a directory: {job.watch_folder}")
         self.watch_folder = job.watch_folder
         self.plex_folder = job.plex_library_folder
+
+    def find_or_defer_playlist(self, items: list | None = None):
+        """Find the configured playlist, creating it when media is available.
+
+        Plex does not allow creating an empty regular playlist. Therefore a
+        missing playlist is tolerated at startup and created from the first
+        indexed batch that needs it.
+        """
+
+        created = False
+        try:
+            playlist = self.plex.playlist(self.job.playlist)
+        except NotFound:
+            if not items:
+                LOG.warning(
+                    "[%s] Playlist %r is missing; it will be recreated when a video is indexed",
+                    self.job.name,
+                    self.job.playlist,
+                )
+                return None
+            playlist = self.plex.createPlaylist(
+                title=self.job.playlist,
+                items=items,
+                smart=False,
+            )
+            created = True
+            LOG.info(
+                "[%s] Recreated missing regular playlist %r with %d item(s)",
+                self.job.name,
+                self.job.playlist,
+                len(items),
+            )
+
+        self.playlist = playlist
+        self.last_playlist_created = created
+        return playlist
 
     def enqueue(self, path: str) -> None:
         if self.stop_event.is_set():
@@ -235,7 +285,11 @@ class PlexPlaylistWatcher:
         return None
 
     def add_missing_items(self, items: list) -> list:
-        playlist = self.plex.playlist(self.job.playlist)
+        playlist = self.find_or_defer_playlist(items)
+        if playlist is None:  # pragma: no cover - items is non-empty here
+            return []
+        if self.last_playlist_created:
+            return list(items)
         existing_rating_keys = {
             getattr(item, "ratingKey", None) for item in playlist.items()
         }
@@ -250,11 +304,18 @@ class PlexPlaylistWatcher:
             LOG.info("[%s] Added %d item(s) to playlist %r", self.job.name, len(missing), self.job.playlist)
         return missing
 
-    def sort_playlist(self) -> None:
+    def sort_playlist(self, fallback_items: list | None = None) -> None:
         """Sort using Plex's move endpoint, refreshing after every move."""
 
-        playlist = self.plex.playlist(self.job.playlist)
-        desired = sorted(playlist.items(), key=duration_sort_key)
+        playlist = self.find_or_defer_playlist(fallback_items)
+        if playlist is None:
+            return
+        sort_key = (
+            creation_date_sort_key
+            if self.job.sort_by == "creation_date"
+            else duration_sort_key
+        )
+        desired = sorted(playlist.items(), key=sort_key)
         desired_ids = [item_identity(item) for item in desired]
 
         for desired_index, desired_id in enumerate(desired_ids):
@@ -277,7 +338,12 @@ class PlexPlaylistWatcher:
 
             playlist.moveItem(target, after=after)
 
-        LOG.info("[%s] Sorted playlist %r by shortest video duration first", self.job.name, self.job.playlist)
+        sort_label = (
+            "video creation date oldest-first"
+            if self.job.sort_by == "creation_date"
+            else "shortest video duration first"
+        )
+        LOG.info("[%s] Sorted playlist %r by %s", self.job.name, self.job.playlist, sort_label)
 
     def process_batch(self, paths: set[str]) -> None:
         candidates = [
@@ -320,7 +386,7 @@ class PlexPlaylistWatcher:
 
         if indexed_items:
             added_items = self.add_missing_items(indexed_items)
-            self.sort_playlist()
+            self.sort_playlist(indexed_items)
             if added_items and self.on_items_added:
                 self.on_items_added(self.job, added_items)
 
@@ -504,9 +570,14 @@ class PlexDiscordBot(discord.Client):
 
     async def send_added_notification(self, job: WatchJob, items: list) -> None:
         user = await self.fetch_user(self.args.discord_user_id)
+        sort_label = (
+            "creation date oldest-first"
+            if job.sort_by == "creation_date"
+            else "shortest-first"
+        )
         lines = [
             f"Added {len(items)} video(s) to Plex playlist "
-            f"**{job.playlist}** ({job.name}) and sorted shortest-first:",
+            f"**{job.playlist}** ({job.name}) and sorted {sort_label}:",
         ]
         for item in items:
             lines.append(
@@ -604,6 +675,7 @@ def build_jobs(settings: dict) -> list[WatchJob]:
         "batch_seconds": settings.get("batch_seconds", 8),
         "folder_poll_seconds": settings.get("folder_poll_seconds", 30),
         "scan": settings.get("scan", True),
+        "sort_by": settings.get("sort_by", "duration"),
     }
     jobs = []
     for index, raw_job in enumerate(raw_jobs, start=1):
@@ -621,6 +693,11 @@ def build_jobs(settings: dict) -> list[WatchJob]:
         plex_library_folder = raw_job.get("plex_library_folder") or str(watch_folder)
         plex_scan_path = raw_job.get("plex_scan_path") or plex_library_folder
         name = raw_job.get("name") or f"{library} → {playlist}"
+        sort_by = str(raw_job.get("sort_by", defaults["sort_by"])).casefold()
+        if sort_by not in {"duration", "creation_date"}:
+            raise ValueError(
+                f"jobs[{index - 1}] sort_by must be 'duration' or 'creation_date'"
+            )
         jobs.append(
             WatchJob(
                 name=str(name),
@@ -641,6 +718,7 @@ def build_jobs(settings: dict) -> list[WatchJob]:
                     raw_job.get("folder_poll_seconds", defaults["folder_poll_seconds"])
                 ),
                 scan=bool(raw_job.get("scan", defaults["scan"])),
+                sort_by=sort_by,
             )
         )
     return jobs

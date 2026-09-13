@@ -26,6 +26,7 @@ Copy-Item .\settings.example.json .\settings.json
 | `batch_seconds` | no | Time to collect nearby events; default is 8 seconds. |
 | `folder_poll_seconds` | no | New-file discovery fallback interval; default is 30 seconds. |
 | `scan` | no | Whether to request a Plex scan; default is `true`. |
+| `sort_by` | no | Playlist order: `duration` (shortest first, default) or `creation_date` (oldest Plex Date Added first). |
 
 ## Job settings
 
@@ -69,5 +70,7 @@ For a local watcher and a differently mounted Plex server:
 }
 ```
 
-Jobs may override `extensions`, timing values, `folder_poll_seconds`, and
-`scan`. Startup files are always ignored; there is no startup-import setting.
+Jobs may override `extensions`, timing values, `folder_poll_seconds`, `scan`,
+and `sort_by`. `creation_date` uses Plex's `addedAt` / Date Added value; items
+without that value sort last. Startup files are always ignored; there is no
+startup-import setting.

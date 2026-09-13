@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 import json
 import logging
 import ntpath
@@ -43,6 +44,14 @@ DEFAULT_EXTENSIONS = {
     ".webm",
     ".wmv",
 }
+
+# A sleeping Windows system pauses the asyncio event loop and Discord
+# heartbeats.  Once the loop resumes, proactively close the old gateway socket
+# so discord.py's normal reconnect loop establishes a live connection again.
+# The threshold is deliberately longer than a normal scheduling hiccup while
+# still recovering promptly from a suspend/resume cycle.
+DISCORD_SLEEP_CHECK_SECONDS = 15
+DISCORD_SLEEP_GAP_SECONDS = 60
 
 
 def normalized_path(value: str) -> str:
@@ -414,6 +423,57 @@ class PlexDiscordBot(discord.Client):
         ]
         self.watcher_thread_tasks = []
         self.notification_loop = None
+        self.sleep_monitor_task = None
+
+    async def setup_hook(self):
+        """Start the sleep detector before the gateway connection begins."""
+
+        self.sleep_monitor_task = asyncio.create_task(self.monitor_system_sleep())
+
+    async def monitor_system_sleep(self) -> None:
+        """Reconnect Discord after the event loop was suspended for a while."""
+
+        last_monotonic = time.monotonic()
+        last_wall_clock = time.time()
+        reconnect_pending = False
+
+        while not self.is_closed():
+            await asyncio.sleep(DISCORD_SLEEP_CHECK_SECONDS)
+
+            current_monotonic = time.monotonic()
+            current_wall_clock = time.time()
+            monotonic_gap = current_monotonic - last_monotonic
+            wall_clock_gap = current_wall_clock - last_wall_clock
+            last_monotonic = current_monotonic
+            last_wall_clock = current_wall_clock
+
+            # Use both clocks: on some Windows configurations the monotonic
+            # clock pauses during sleep, while wall-clock time still advances.
+            if max(monotonic_gap, wall_clock_gap) >= DISCORD_SLEEP_GAP_SECONDS:
+                reconnect_pending = True
+                LOG.warning(
+                    "Detected a %.0f-second system/event-loop gap; "
+                    "refreshing the Discord gateway connection",
+                    max(monotonic_gap, wall_clock_gap),
+                )
+
+            if reconnect_pending and self.ws is not None:
+                try:
+                    # Code 1000 tells discord.py to stay in its reconnect
+                    # loop. This keeps watcher threads and their startup
+                    # baseline alive while replacing the stale socket.
+                    await asyncio.wait_for(self.ws.close(code=1000), timeout=10)
+                    reconnect_pending = False
+                except asyncio.TimeoutError:
+                    LOG.exception("Timed out closing the stale Discord gateway socket")
+                except Exception:
+                    LOG.exception("Could not refresh the Discord gateway connection")
+
+    async def on_disconnect(self):
+        LOG.warning("Discord gateway disconnected; waiting for reconnect")
+
+    async def on_resumed(self):
+        LOG.info("Discord gateway session resumed")
 
     async def on_ready(self):
         self.notification_loop = asyncio.get_running_loop()
@@ -483,6 +543,8 @@ def configure_logging(args: argparse.Namespace) -> Path:
     log_path = Path(args.log_file).expanduser()
     if not log_path.is_absolute():
         log_path = Path(__file__).resolve().parent / log_path
+    date_stamp = datetime.now().strftime("%Y-%m-%d")
+    log_path = log_path.with_name(f"{log_path.stem}-{date_stamp}{log_path.suffix}")
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     formatter = logging.Formatter(

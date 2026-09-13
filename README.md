@@ -51,9 +51,9 @@ stops the matching bot process.
 
 The bot writes timestamps, watcher activity, Plex scan/indexing progress,
 playlist operations, Discord connection events, and errors to
-`logs/plex_playlist_watcher.log`. Logs rotate automatically at 5 MiB, with the
-five previous files retained as `.1` through `.5`. Configure this globally in
-`settings.json` if desired:
+`logs/plex_playlist_watcher-YYYY-MM-DD.log`. Logs rotate automatically at 5
+MiB, with the five previous files retained as `.1` through `.5`. Configure
+this globally in `settings.json` if desired:
 
 ```json
 {
@@ -63,9 +63,10 @@ five previous files retained as `.1` through `.5`. Configure this globally in
 }
 ```
 
-Relative log paths are resolved from the project directory. Log files are
-ignored by Git, so they are available locally for debugging without entering
-the repository.
+Relative log paths are resolved from the project directory. The current date
+is added to the configured log filename when the bot starts; rotated files
+retain that dated name. Log files are ignored by Git, so they are available
+locally for debugging without entering the repository.
 
 Every job watches its configured folder, allows files to finish copying,
 scans them into its configured Plex library, adds them to its paired regular
@@ -79,6 +80,12 @@ the watcher was suspended during sleep. The startup baseline is still ignored,
 so enabling this fallback does not turn startup into a playlist import. The
 default discovery interval is 30 seconds and can be changed globally with
 `folder_poll_seconds` or overridden on an individual job.
+
+The Discord gateway has a separate sleep-recovery monitor. If the event loop
+was suspended for about one minute, the bot refreshes the gateway connection
+after wake while keeping the filesystem watchers and their startup baselines
+alive. See the [operations guide](docs/operations.md#discord-stays-offline-after-sleep)
+for the relevant log messages.
 
 For deeper project documentation, see the [documentation index](docs/README.md),
 including [architecture](docs/architecture.md),

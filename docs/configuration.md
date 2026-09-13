@@ -16,7 +16,7 @@ Copy-Item .\settings.example.json .\settings.json
 | `plex_token` | yes | Plex authentication token. `PLEX_TOKEN` overrides it. |
 | `discord_token` | yes | Discord bot token. `DISCORD_TOKEN` overrides it. |
 | `discord_user_id` | yes | Numeric Discord ID receiving notification DMs. |
-| `log_file` | no | Log path; relative paths start at the project directory. |
+| `log_file` | no | Base log path; relative paths start at the project directory. The current date is added to the filename. |
 | `log_max_bytes` | no | Rotation threshold; default is 5 MiB. |
 | `log_backup_count` | no | Rotated files retained; default is 5. |
 | `settle_seconds` | no | Required file stability period; default is 5. |

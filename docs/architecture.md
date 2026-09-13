@@ -47,10 +47,14 @@ in separate batches; each batch still re-sorts the complete playlist.
 ## Sleep and wake behavior
 
 The Python process and Discord connection may be suspended while Windows
-sleeps. Discord's client is allowed to reconnect after wake. The watcher also
-performs periodic discovery, so files created during sleep are detected after
-wake even if the original filesystem event was lost. Files present when the
-bot established its baseline remain ignored.
+sleeps. A small asyncio monitor detects a long event-loop gap after wake and
+closes the stale gateway socket with a normal reconnect code. discord.py then
+reconnects without stopping the watcher threads or rebuilding their startup
+baselines. The watcher also performs periodic discovery, so files created
+during sleep are detected after wake even if the original filesystem event was
+lost. The monitor checks every 15 seconds and treats a gap of 60 seconds or
+more as a suspend/resume event. Files present when the bot established its
+baseline remain ignored.
 
 ## Process lifecycle
 

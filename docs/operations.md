@@ -22,15 +22,20 @@ falls back to `python.exe` on `PATH`.
 ## Normal operation
 
 The batch file returns immediately because the bot and supervisor run hidden.
-Confirm operation in:
+Confirm operation in the dated log file, for example:
 
 ```text
-logs\plex_playlist_watcher.log
+logs\plex_playlist_watcher-2026-09-12.log
 ```
 
 Healthy startup includes messages for Discord gateway connection and each
 configured job's `Watching ...` line. A processed file should produce queued,
 batch, scan, found, added, sorted, and Discord notification activity.
+
+The configured `log_file` is a base name. The bot adds the startup date before
+the extension, so `logs\plex_playlist_watcher.log` produces a file such as
+`logs\plex_playlist_watcher-2026-09-12.log`. Size-based rotation uses the same
+dated basename and appends `.1` through the configured backup count.
 
 ## Stop and restart
 
@@ -88,6 +93,14 @@ for the Discord exception; a DM failure does not stop Plex watching.
 The periodic discovery fallback defaults to 30 seconds after wake. Look for a
 `Discovery found new file` entry. Lower `folder_poll_seconds` if quicker
 detection is needed, at the cost of more directory enumeration.
+
+### Discord stays offline after sleep
+
+After a suspend/resume gap of about one minute, the bot detects that Discord's
+gateway heartbeats were interrupted and forces a gateway reconnect. Look for
+`Detected a ... system/event-loop gap`, followed by either `Discord gateway
+session resumed` or a fresh `Discord bot logged in as ...` message. The
+filesystem watchers remain running during this reconnect.
 
 ## GitHub safety
 

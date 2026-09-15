@@ -76,6 +76,13 @@ DM. The default is `duration`, which sorts shortest-first; use
 Only files created or moved into a watched folder after the bot starts are
 processed. Files already present at startup are ignored.
 
+A configured folder may be temporarily unavailable when the bot starts. The
+job remains active, logs that it is waiting, and attaches its filesystem
+watcher when the folder appears. Files already present when the watcher first
+attaches are treated as that job's startup baseline and ignored. If a folder is
+deleted and recreated while the bot is running, the watcher is reattached and
+periodic discovery provides a fallback for events missed during the transition.
+
 In addition to live filesystem events, each job periodically checks for newly
 appeared video paths. This fallback helps recover files added while Windows or
 the watcher was suspended during sleep. The startup baseline is still ignored,

@@ -139,10 +139,14 @@ class PlexPlaylistWatcher:
                 "Use a regular playlist because smart playlists cannot be reordered."
             )
 
-        if not job.watch_folder.is_dir():
-            raise ValueError(f"Watched folder does not exist or is not a directory: {job.watch_folder}")
         self.watch_folder = job.watch_folder
         self.plex_folder = job.plex_library_folder
+        if not self.watch_folder.is_dir():
+            LOG.warning(
+                "[%s] Watched folder is unavailable at startup: %s; will retry until it exists",
+                self.job.name,
+                self.watch_folder,
+            )
 
     def find_or_defer_playlist(self, items: list | None = None):
         """Find the configured playlist, creating it when media is available.
@@ -202,6 +206,11 @@ class PlexPlaylistWatcher:
     def discover_new_files(self) -> None:
         """Catch file arrivals missed while Windows or the watcher was asleep."""
 
+        # A folder can be deleted and recreated while the bot is running. Keep
+        # the previous baseline while it is unavailable so recreation does not
+        # turn every existing file into a new arrival.
+        if not self.watch_folder.is_dir():
+            return
         current_files = self.supported_files()
         new_files = current_files - self.known_files
         self.known_files = current_files
@@ -406,26 +415,87 @@ class PlexPlaylistWatcher:
         worker.start()
 
         handler = WatchHandler(self)
-        observer = Observer()
-        observer.schedule(handler, str(self.watch_folder), recursive=True)
-        observer.start()
-        LOG.info("[%s] Watching %s", self.job.name, self.watch_folder)
-        self.known_files = self.supported_files()
-        LOG.info(
-            "[%s] Ignoring %d file(s) already present at startup",
-            self.job.name,
-            len(self.known_files),
-        )
+        observer = None
+        baseline_established = False
+        folder_available = False
 
         try:
             next_discovery = time.monotonic() + self.job.folder_poll_seconds
             while not self.stop_event.wait(1):
+                folder_exists = self.watch_folder.is_dir()
+
+                if observer is not None and not observer.is_alive():
+                    LOG.warning(
+                        "[%s] File watcher stopped for %s; will retry",
+                        self.job.name,
+                        self.watch_folder,
+                    )
+                    observer.stop()
+                    observer.join()
+                    observer = None
+
+                if folder_exists and observer is None:
+                    candidate_observer = None
+                    candidate_started = False
+                    try:
+                        candidate_observer = Observer()
+                        candidate_observer.schedule(
+                            handler,
+                            str(self.watch_folder),
+                            recursive=True,
+                        )
+                        candidate_observer.start()
+                        candidate_started = True
+                    except (OSError, RuntimeError) as exc:
+                        if candidate_observer is not None:
+                            candidate_observer.stop()
+                            if candidate_started:
+                                candidate_observer.join()
+                        LOG.warning(
+                            "[%s] Could not start watching %s; will retry: %s",
+                            self.job.name,
+                            self.watch_folder,
+                            exc,
+                        )
+                    else:
+                        observer = candidate_observer
+                        if not folder_available:
+                            LOG.info("[%s] Watching %s", self.job.name, self.watch_folder)
+                        if not baseline_established:
+                            self.known_files = self.supported_files()
+                            LOG.info(
+                                "[%s] Ignoring %d file(s) already present at startup",
+                                self.job.name,
+                                len(self.known_files),
+                            )
+                            baseline_established = True
+
+                if not folder_exists and observer is not None:
+                    LOG.warning(
+                        "[%s] Watched folder disappeared: %s; waiting for it to be recreated",
+                        self.job.name,
+                        self.watch_folder,
+                    )
+                    observer.stop()
+                    observer.join()
+                    observer = None
+
+                if folder_exists != folder_available:
+                    if not folder_exists:
+                        LOG.warning(
+                            "[%s] Watched folder is unavailable: %s; waiting for it to return",
+                            self.job.name,
+                            self.watch_folder,
+                        )
+                    folder_available = folder_exists
+
                 if time.monotonic() >= next_discovery:
                     self.discover_new_files()
                     next_discovery = time.monotonic() + self.job.folder_poll_seconds
         finally:
-            observer.stop()
-            observer.join()
+            if observer is not None:
+                observer.stop()
+                observer.join()
             self.stop_event.set()
             worker.join(timeout=2)
 

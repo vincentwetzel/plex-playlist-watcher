@@ -35,7 +35,7 @@ Copy-Item .\settings.example.json .\settings.json
 | Setting | Description |
 |---|---|
 | `name` | Optional label used in logs and Discord DMs. |
-| `watch_folder` | Local folder monitored by the Windows watcher. |
+| `watch_folder` | Local folder monitored by the Windows watcher. It may be temporarily missing; the job waits for it and attaches when it appears. |
 | `library` | Plex library title to scan and search. |
 | `playlist` | Regular Plex playlist title to update. |
 

@@ -21,10 +21,18 @@ Each watcher has its own Plex connection, queue, event observer, library, and
 playlist. A Discord notification callback is shared by the watchers and adds
 the job name to each DM.
 
+Watch folders are resilient to temporary unavailability. A missing folder does
+not prevent the Discord client or other jobs from starting. The watcher keeps
+its worker alive, retries the filesystem observer until the folder exists, and
+reattaches after the folder is recreated. Periodic discovery remains the
+fallback when filesystem events are missed during deletion or recreation.
+
 ## New-file flow
 
-1. The watcher establishes a baseline of supported video paths already in the
-   folder. Those files are intentionally ignored.
+1. When the folder is available, the watcher establishes a baseline of
+   supported video paths already in the folder. Those files are intentionally
+   ignored. If the folder is unavailable, baseline establishment waits until
+   the first successful attachment.
 2. Watchdog queues files created or moved into the folder. A periodic scan
    also queues paths first discovered after startup, which protects against
    missed Windows filesystem events during sleep.

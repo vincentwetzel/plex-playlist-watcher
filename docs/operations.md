@@ -28,9 +28,11 @@ Confirm operation in the dated log file, for example:
 logs\plex_playlist_watcher-2026-09-12.log
 ```
 
-Healthy startup includes messages for Discord gateway connection and each
-configured job's `Watching ...` line. A processed file should produce queued,
-batch, scan, found, added, sorted, and Discord notification activity.
+Healthy startup includes a Discord gateway connection and either a `Watching ...`
+line for each available job or a warning that an unavailable job is waiting for
+its folder. Once that folder appears, it should produce its `Watching ...` line.
+A processed file should produce queued, batch, scan, found, added, sorted, and
+Discord notification activity.
 
 The configured `log_file` is a base name. The bot adds the startup date before
 the extension, so `logs\plex_playlist_watcher.log` produces a file such as
@@ -106,9 +108,9 @@ Files found after the original startup baseline are processed. The Watchdog
 event subscription may not resume for the recreated directory, so this polling
 fallback is what guarantees recovery.
 
-If the bot starts while the folder is missing, startup fails until the folder
-exists. Files already present when the bot eventually starts are intentionally
-ignored as startup files.
+If the bot starts while the folder is missing, the job remains active and
+retries until the folder exists. Files already present when the bot first
+attaches to that folder are intentionally ignored as startup files.
 
 ### Playlist was deleted
 

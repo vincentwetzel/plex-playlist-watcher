@@ -87,6 +87,17 @@ If the configured regular playlist was deleted, the bot recreates it from the
 first successfully indexed batch. Look for `Recreated missing regular playlist`
 in the log.
 
+### Playlist order is wrong or keeps changing
+
+After each move, the watcher reloads the playlist from Plex because PlexAPI
+otherwise serves a cached item list. It verifies the resulting order and
+retries up to three times if the playlist changes during sorting. A retry is
+logged as `changed during sorting; retrying`; if all attempts are interrupted,
+the batch reports `kept changing while it was sorted` and does not log a
+successful sort. Check whether another Plex client or automation is editing
+that playlist at the same time. For duration sorting, items without a duration
+are intentionally placed after items with a known duration.
+
 ### Discord DMs are not arriving
 
 Verify `discord_token` and numeric `discord_user_id`. The bot does not need

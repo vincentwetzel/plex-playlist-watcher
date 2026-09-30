@@ -131,6 +131,10 @@ first. Set it to `creation_date` to sort oldest-first by Plex's Date Added
 (`addedAt`) value. If the configured playlist is deleted, the bot recreates a
 regular playlist automatically when the next video is indexed.
 
+The sorter reloads the playlist from Plex after each move and verifies the
+result, retrying up to three times if another client changes the playlist
+during sorting. For duration sorting, items without a known duration go last.
+
 Each job is independent: a new file in one folder is scanned only in that
 job's library, added only to that job's playlist, and reported with the job
 name in the DM. The bot can run any number of jobs from the same settings

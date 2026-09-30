@@ -32,6 +32,7 @@ from watchdog.observers import Observer
 
 
 LOG = logging.getLogger("plex-playlist-watcher")
+PLAYLIST_SORT_ATTEMPTS = 3
 DEFAULT_EXTENSIONS = {
     ".avi",
     ".m4v",
@@ -314,7 +315,7 @@ class PlexPlaylistWatcher:
         return missing
 
     def sort_playlist(self, fallback_items: list | None = None) -> None:
-        """Sort using Plex's move endpoint, refreshing after every move."""
+        """Sort using Plex's move endpoint and verify the persisted order."""
 
         playlist = self.find_or_defer_playlist(fallback_items)
         if playlist is None:
@@ -324,28 +325,67 @@ class PlexPlaylistWatcher:
             if self.job.sort_by == "creation_date"
             else duration_sort_key
         )
-        desired = sorted(playlist.items(), key=sort_key)
-        desired_ids = [item_identity(item) for item in desired]
+        for attempt in range(1, PLAYLIST_SORT_ATTEMPTS + 1):
+            # PlexAPI's Playlist.items() returns its cached _items list. Reload
+            # explicitly so both the target order and move positions reflect
+            # the server, including changes made by another Plex client.
+            playlist.reload()
+            desired = sorted(playlist.items(), key=sort_key)
+            desired_ids = [item_identity(item) for item in desired]
 
-        for desired_index, desired_id in enumerate(desired_ids):
-            current = playlist.items()
-            current_by_id = {item_identity(item): item for item in current}
-            target = current_by_id[desired_id]
+            restart = False
+            for desired_index, desired_id in enumerate(desired_ids):
+                current = playlist.items()
+                current_ids = [item_identity(item) for item in current]
+                if desired_id not in current_ids:
+                    # An external edit removed or replaced an item after the
+                    # snapshot. Start over from the latest server state.
+                    restart = True
+                    break
+                if current_ids[desired_index] == desired_id:
+                    continue
 
-            # Remove the target conceptually before finding the item that will
-            # precede it. This avoids trying to move an item after itself.
-            without_target = [
-                item for item in current if item_identity(item) != desired_id
-            ]
-            if desired_index == 0:
-                after = None
-            else:
-                after = without_target[desired_index - 1]
+                target_index = current_ids.index(desired_id)
+                target = current[target_index]
+                # Remove the target conceptually before finding the item that
+                # will precede it, avoiding a move after the target itself.
+                without_target = current[:target_index] + current[target_index + 1:]
+                after = without_target[desired_index - 1] if desired_index else None
+                playlist.moveItem(target, after=after)
+                # moveItem also consults the cached list to resolve playlist
+                # item IDs; reload before the next move to use current state.
+                playlist.reload()
 
-            if desired_index < len(current) and item_identity(current[desired_index]) == desired_id:
+            if restart:
+                LOG.info(
+                    "[%s] Playlist %r changed during sorting; retrying (%d/%d)",
+                    self.job.name,
+                    self.job.playlist,
+                    attempt,
+                    PLAYLIST_SORT_ATTEMPTS,
+                )
                 continue
 
-            playlist.moveItem(target, after=after)
+            playlist.reload()
+            actual_items = playlist.items()
+            actual_ids = [item_identity(item) for item in actual_items]
+            latest_desired_ids = [
+                item_identity(item) for item in sorted(actual_items, key=sort_key)
+            ]
+            if actual_ids == latest_desired_ids:
+                break
+
+            LOG.info(
+                "[%s] Playlist %r changed during sorting; retrying (%d/%d)",
+                self.job.name,
+                self.job.playlist,
+                attempt,
+                PLAYLIST_SORT_ATTEMPTS,
+            )
+        else:
+            raise RuntimeError(
+                f"Playlist {self.job.playlist!r} kept changing while it was sorted"
+            )
 
         sort_label = (
             "video creation date oldest-first"

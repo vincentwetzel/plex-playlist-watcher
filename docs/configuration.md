@@ -28,6 +28,11 @@ Copy-Item .\settings.example.json .\settings.json
 | `scan` | no | Whether to request a Plex scan; default is `true`. |
 | `sort_by` | no | Playlist order: `duration` (shortest first, default) or `creation_date` (oldest Plex Date Added first). |
 
+For `duration`, items without a Plex duration sort after items with a known
+duration. The watcher reloads the playlist after each reorder operation and
+checks the resulting order. If another Plex client changes the playlist while
+it is sorting, it retries up to three times.
+
 ## Job settings
 
 `jobs` must be a non-empty array. Each job requires:

@@ -48,7 +48,9 @@ fallback when filesystem events are missed during deletion or recreation.
 8. The entire regular playlist is reordered using Plex's move operation,
    according to the job's `sort_by` setting. Duration sorts shortest first;
    creation date sorts oldest Plex Date Added first. Missing sort values go
-   last.
+   last. The watcher reloads the playlist from Plex after each move because
+   PlexAPI otherwise returns a cached item list, then verifies the saved order
+   and retries if another client changed the playlist during sorting.
 9. If at least one item was added, the Discord client sends a summary DM.
 
 Events that arrive while a batch is being processed remain queued for the

@@ -18,7 +18,7 @@ Copy-Item .\settings.example.json .\settings.json
 | `discord_user_id` | yes | Numeric Discord ID receiving notification DMs. |
 | `log_file` | no | Base log path; relative paths start at the project directory. The current date is added to the filename. |
 | `log_max_bytes` | no | Rotation threshold; default is 5 MiB. |
-| `log_backup_count` | no | Rotated files retained; default is 5. |
+| `log_backup_count` | no | Number of older dated or size-rotated log files to retain; default is 5. Pruned at startup. Set to `0` to keep only the current log. |
 | `settle_seconds` | no | Required file stability period; default is 5. |
 | `file_timeout` | no | Maximum wait for a file to stabilize; default is 3600 seconds. |
 | `plex_timeout` | no | Maximum wait for Plex to index a file; default is 300 seconds. |

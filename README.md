@@ -51,9 +51,11 @@ stops the matching bot process.
 
 The bot writes timestamps, watcher activity, Plex scan/indexing progress,
 playlist operations, Discord connection events, and errors to
-`logs/plex_playlist_watcher-YYYY-MM-DD.log`. Logs rotate automatically at 5
-MiB, with the five previous files retained as `.1` through `.5`. Configure
-this globally in `settings.json` if desired:
+`logs/plex_playlist_watcher-YYYY-MM-DD.log`. Logs rotate automatically at the
+configured size threshold (5 MiB by default). At startup, older dated log
+files and their size-rotation files are pruned so the current file and the
+newest `log_backup_count` backup files remain (5 by default). Configure this
+globally in `settings.json` if desired:
 
 ```json
 {
@@ -65,8 +67,9 @@ this globally in `settings.json` if desired:
 
 Relative log paths are resolved from the project directory. The current date
 is added to the configured log filename when the bot starts; rotated files
-retain that dated name. Log files are ignored by Git, so they are available
-locally for debugging without entering the repository.
+retain that dated name. Set `log_backup_count` to zero to keep only the current
+dated log. Log files are ignored by Git, so they are available locally for
+debugging without entering the repository.
 
 Every job watches its configured folder, allows files to finish copying,
 scans them into its configured Plex library, adds them to its paired regular

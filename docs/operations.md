@@ -37,7 +37,11 @@ Discord notification activity.
 The configured `log_file` is a base name. The bot adds the startup date before
 the extension, so `logs\plex_playlist_watcher.log` produces a file such as
 `logs\plex_playlist_watcher-2026-09-12.log`. Size-based rotation uses the same
-dated basename and appends `.1` through the configured backup count.
+dated basename and appends `.1` through the configured backup count. At startup,
+older matching dated and legacy base-name logs, including their size-rotated
+copies, are pruned. The bot keeps the current log and the newest
+`log_backup_count` older files (5 by default). Set `log_backup_count` to `0`
+to keep only the current dated log.
 
 ## Stop and restart
 

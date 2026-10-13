@@ -17,6 +17,7 @@ import logging
 import ntpath
 import os
 import queue
+import re
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -720,13 +721,48 @@ def run_discord_bot(args: argparse.Namespace) -> None:
     bot.run(args.discord_token, log_handler=None)
 
 
+def prune_old_logs(base_log_path: Path, current_log_path: Path, backup_count: int) -> int:
+    """Keep the current dated log and the newest configured number of backups."""
+
+    log_pattern = re.compile(
+        rf"^{re.escape(base_log_path.stem)}-\d{{4}}-\d{{2}}-\d{{2}}"
+        rf"{re.escape(base_log_path.suffix)}(?:\.\d+)?$|"
+        rf"^{re.escape(base_log_path.name)}(?:\.\d+)?$"
+    )
+    old_logs = []
+    try:
+        for candidate in base_log_path.parent.iterdir():
+            if candidate == current_log_path or not log_pattern.fullmatch(candidate.name):
+                continue
+            try:
+                if candidate.is_file():
+                    old_logs.append((candidate.stat().st_mtime, candidate))
+            except OSError:
+                continue
+    except OSError:
+        return 0
+
+    old_logs.sort(key=lambda entry: (entry[0], entry[1].name), reverse=True)
+    deleted = 0
+    for _, candidate in old_logs[backup_count:]:
+        try:
+            candidate.unlink()
+            deleted += 1
+        except OSError:
+            continue
+    return deleted
+
+
 def configure_logging(args: argparse.Namespace) -> Path:
-    log_path = Path(args.log_file).expanduser()
-    if not log_path.is_absolute():
-        log_path = Path(__file__).resolve().parent / log_path
+    base_log_path = Path(args.log_file).expanduser()
+    if not base_log_path.is_absolute():
+        base_log_path = Path(__file__).resolve().parent / base_log_path
     date_stamp = datetime.now().strftime("%Y-%m-%d")
-    log_path = log_path.with_name(f"{log_path.stem}-{date_stamp}{log_path.suffix}")
+    log_path = base_log_path.with_name(
+        f"{base_log_path.stem}-{date_stamp}{base_log_path.suffix}"
+    )
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    removed_logs = prune_old_logs(base_log_path, log_path, args.log_backup_count)
 
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -752,6 +788,12 @@ def configure_logging(args: argparse.Namespace) -> Path:
         args.log_max_bytes,
         args.log_backup_count,
     )
+    if removed_logs:
+        logging.getLogger(__name__).info(
+            "Removed %d older dated log file(s); retaining the current log and %d backup(s)",
+            removed_logs,
+            args.log_backup_count,
+        )
     return log_path
 
 
@@ -886,7 +928,7 @@ def parse_args() -> argparse.Namespace:
         "--log-backup-count",
         type=int,
         default=settings.get("log_backup_count", 5),
-        help="Number of rotated log files to retain",
+        help="Number of older dated or rotated log files to retain",
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
